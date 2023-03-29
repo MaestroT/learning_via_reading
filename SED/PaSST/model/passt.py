@@ -271,7 +271,14 @@ class Mlp(nn.Module):
 
 first_RUN = True
 
-
+'''
+Performs 2D arrays to patch embedding: convert the input audio spectrogram to patches.
+It takes in an image tensor and outputs a tensor of patches. 
+The input image is first passed through a convolutional layer 
+with kernel size equal to the patch size and stride equal to the patch size. 
+The output of the convolutional layer is then flattened and transposed to obtain 
+the final tensor of patches. 
+'''
 class PatchEmbed(nn.Module):
     """ 2D Image to Patch Embedding
     """
@@ -293,13 +300,17 @@ class PatchEmbed(nn.Module):
         self.norm = norm_layer(embed_dim) if norm_layer else nn.Identity()
 
     def forward(self, x):
-        B, C, H, W = x.shape
+        B, C, H, W = x.shape # [B C F T] for audio spectrogram 
         if not (H == self.img_size[0] and W == self.img_size[1]):
             warnings.warn(f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]}).")
         # to do maybe replace weights
-        x = self.proj(x)
+        x = self.proj(x) # conv layer
         if self.flatten:
-            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC
+            # first flatten in the Time dimension: B E F^ T^ -> B E F^*T^
+            # then transpose:  B E F^*T^ -> B F^*T^ E
+            # x: (batch_size, num_patches, embed_dim)
+            # same: x = x.reshape(x.shape[0], x.shape[1], -1).transpose(1, 2)
+            x = x.flatten(2).transpose(1, 2)  # BCHW -> BNC  
         x = self.norm(x)
         if first_RUN: print("self.norm(x)", x.size())
         return x
@@ -507,6 +518,7 @@ class PaSST(nn.Module):
             x = x[:, :, :, :time_new_pos_embed.shape[-1]]
         x = x + time_new_pos_embed
         if first_RUN: print(" self.freq_new_pos_embed.shape", self.freq_new_pos_embed.shape)
+        # time_new_pos_embed & freq_new_pos_embed
         x = x + self.freq_new_pos_embed
 
         # Structured Patchout https://arxiv.org/abs/2110.05069 Section 2.2
